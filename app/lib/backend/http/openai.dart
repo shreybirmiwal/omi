@@ -31,7 +31,6 @@ Future<String> triggerTestMemoryPrompt(String prompt, String transcript) async {
       .trim());
 }
 
-
 Future<String> getPhotoDescription(Uint8List data) async {
   var messages = [
     {
@@ -49,7 +48,8 @@ Future<String> getPhotoDescription(Uint8List data) async {
       ],
     },
   ];
-  var res = await gptApiCall(model: 'gpt-4o', messages: messages, maxTokens: 100);
+  var res =
+      await gptApiCall(model: 'gpt-4o', messages: messages, maxTokens: 100);
   if (res == null) return '';
   return res;
 }
@@ -74,7 +74,11 @@ Future<dynamic> gptApiCall({
   if (urlSuffix == 'embeddings') {
     body = jsonEncode({'model': model, 'input': contentToEmbed});
   } else {
-    var bodyData = {'model': model, 'messages': messages, 'temperature': temperature};
+    var bodyData = {
+      'model': model,
+      'messages': messages,
+      'temperature': temperature
+    };
     if (jsonResponseFormat) {
       bodyData['response_format'] = {'type': 'json_object'};
     } else if (tools.isNotEmpty) {
@@ -87,7 +91,8 @@ Future<dynamic> gptApiCall({
     body = jsonEncode(bodyData);
   }
 
-  var response = await makeApiCall(url: url, headers: headers, body: body, method: 'POST');
+  var response =
+      await makeApiCall(url: url, headers: headers, body: body, method: 'POST');
   return extractContentFromResponse(
     response,
     isEmbedding: urlSuffix == 'embeddings',
@@ -95,17 +100,93 @@ Future<dynamic> gptApiCall({
   );
 }
 
-Future<String> executeGptPrompt(String? prompt, {bool ignoreCache = false}) async {
+Future<String> executeGptPrompt(String? prompt,
+    {bool ignoreCache = false}) async {
   if (prompt == null) return '';
 
   var prefs = SharedPreferencesUtil();
   var promptBase64 = base64Encode(utf8.encode(prompt));
   var cachedResponse = prefs.gptCompletionCache(promptBase64);
-  if (!ignoreCache && prefs.gptCompletionCache(promptBase64).isNotEmpty) return cachedResponse;
+  if (!ignoreCache && prefs.gptCompletionCache(promptBase64).isNotEmpty)
+    return cachedResponse;
 
   String response = await gptApiCall(model: 'gpt-4o', messages: [
     {'role': 'system', 'content': prompt}
   ]);
+  prefs.setGptCompletionCache(promptBase64, response);
+  debugPrint('executeGptPrompt response: $response');
+  return response;
+}
+
+// Targon is free inference - like chat gpt but free open source models
+// This function is an exact replica of gpt_api_call function, but just implemented for Targon API
+Future<dynamic> targon_api_call({
+  required String model,
+  String urlSuffix = 'chat/completions',
+  List<Map<String, dynamic>> messages = const [],
+  String contentToEmbed = '',
+  bool jsonResponseFormat = false,
+  List tools = const [],
+  File? audioFile,
+  double temperature = 0.7,
+  int? maxTokens,
+}) async {
+  final url = 'https://api.targon.com/v1/$urlSuffix';
+  final headers = {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Authorization': 'Bearer sn4_nsz99yxqenqv1qoqxs7towb43a25',
+  };
+
+  final String body;
+  if (urlSuffix == 'completions') {
+    // For direct text completion (non-chat)
+    body = jsonEncode({
+      'model': model,
+      'prompt': contentToEmbed,
+      'temperature': temperature,
+      'max_tokens': maxTokens ?? 256,
+      'top_p': 0.1,
+      'frequency_penalty': 0,
+      'presence_penalty': 0,
+      'stream': false,
+    });
+  } else {
+    // For chat-based completion
+    var bodyData = {
+      'model': model,
+      'messages': messages,
+      'temperature': temperature,
+      'max_tokens': maxTokens ?? 256,
+      'top_p': 0.1,
+      'frequency_penalty': 0,
+      'presence_penalty': 0,
+      'stream': false, // Disable streaming for simplicity
+    };
+    body = jsonEncode(bodyData);
+  }
+
+  var response =
+      await makeApiCall(url: url, headers: headers, body: body, method: 'POST');
+  return extractContentFromResponse(response);
+}
+
+// Targon is free inference - like chat gpt but free open source models
+// This function is an exact replica of executeGPTfunction function, but just implemented for Targon API
+Future<String> executeTargonPrompt(String? prompt,
+    {bool ignoreCache = false}) async {
+  if (prompt == null) return '';
+
+  var prefs = SharedPreferencesUtil();
+  var promptBase64 = base64Encode(utf8.encode(prompt));
+  var cachedResponse = prefs.gptCompletionCache(promptBase64);
+  if (!ignoreCache && cachedResponse.isNotEmpty) return cachedResponse;
+
+  String response = await gptApiCall(
+    model: 'NousResearch/Meta-Llama-3.1-8B-Instruct',
+    urlSuffix: 'completions',
+    contentToEmbed: prompt,
+  );
+
   prefs.setGptCompletionCache(promptBase64, response);
   debugPrint('executeGptPrompt response: $response');
   return response;
